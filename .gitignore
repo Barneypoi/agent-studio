@@ -1,0 +1,26 @@
+/game/.godot/
+/data/
+/test-data/
+/dist/
+*.app/
+*.pck
+*.zip
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+auth.json
+bridge.json
+tasks.json
+studio.json
+codex-state/
+codex-logs/
+# Local acceptance evidence contains real task IDs and private machine context.
+/docs/ACCEPTANCE.json
+/docs/previews/*
+!/docs/previews/characters-seated.png
+!/docs/previews/characters-seated-detail.png
+!/docs/previews/characters-seated-rotated.png
+!/docs/previews/approval-rule.png
+!/docs/previews/approval-session.png

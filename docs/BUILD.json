@@ -1,0 +1,37 @@
+{
+  "bridgeSha256": "8e9d67ff8497389c6760859e18af85005fe750f07583d9ce868ac4ba601338cc",
+  "gamePackSha256": "9c171b3d116e2f8496fddc7bc0b7acddb1de17b4b8bee347241af8cffd198d98",
+  "godot": "4.7.2",
+  "node": "26.3.1",
+  "codexTested": "0.153.4",
+  "platform": "macOS arm64",
+  "validation": "passed",
+  "uiValidation": {
+    "date": "2026-09-09",
+    "change": "docked conversation with durable end action",
+    "uiChecks": 26,
+    "endConversationRenderChecks": 11,
+    "protocolRegression": "passed (offline)",
+    "mode": "offline fixture, packaged GodotEngine and exported game.pck"
+  },
+  "codexAcceptanceBridgeSha256": "96d9f488062e5a95f2ad0583dd891ec0a9047adca91e9e2117a20cfda3961ac9",
+  "seatingValidation": {
+    "date": "2026-09-09",
+    "change": "directional seated characters, upright workstations and layered occlusion",
+    "modelChecks": 19,
+    "uiChecks": 26,
+    "worldChecks": 11,
+    "render": "passed: arrival, all four desk directions, sitting and leaving",
+    "mode": "offline fixture, packaged GodotEngine and exported game.pck"
+  },
+  "approvalModuleSha256": "b5366e1315b09a729dfb4d74accf3395f9b8e2a6af555c76f208cdaa76c5c656",
+  "approvalValidation": {
+    "date": "2026-09-09",
+    "protocol": "Codex 0.153.4 generated types and official App Server docs",
+    "bridgeRegression": "passed (offline)",
+    "uiChecks": 26,
+    "renderChecks": 21,
+    "mode": "offline fixture, packaged GodotEngine and exported game.pck",
+    "realPolicyPersistence": "not exercised; no real authorization rules created"
+  }
+}
