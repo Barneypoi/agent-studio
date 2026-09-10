@@ -28,6 +28,7 @@ try{
   const denied=await fetch('http://127.0.0.1:'+info.port+'/state');assert.equal(denied.status,403);
   const originDenied=await fetch('http://127.0.0.1:'+info.port+'/state',{headers:{Authorization:'Bearer '+info.token,Origin:'http://example.com'}});assert.equal(originDenied.status,403);
   const done=await task('complete');assert.equal((await state(done.id)).status,'completed');assert.deepEqual((await state(done.id)).files,['result.txt']);
+  assert.deepEqual((await state(done.id)).conversation.map(e=>[e.role,e.text]),[['user','complete'],['assistant','Offline completed output']],'initial input precedes streamed reply; native duplicate events do not repeat bubbles');
 	const beforeFinish=await state(done.id);
 	await api('/finish',{id:done.id});
 	const finished=await state(done.id);
@@ -35,6 +36,8 @@ try{
 	assert.equal(finished.updated,beforeFinish.updated,'ending history must not replace a newer task as the current task');
 	assert.equal(JSON.parse(await fs.readFile(path.join(data,'tasks.json'),'utf8')).find(t=>t.id===done.id).endedAt,finished.endedAt,'acknowledgement is durable before responding');
   await api('/message',{id:done.id,text:'complete again'});assert.equal((await state(done.id)).status,'completed','completion before RPC reply must not become running');
+  const completedConversation=(await state(done.id)).conversation;
+  assert.deepEqual(completedConversation.map(e=>e.text),['complete','Offline completed output','complete again','Offline completed output'],'continuing retains both turns even when the fixture reuses assistant item IDs');
 	assert.equal((await state(done.id)).endedAt,undefined,'continuing an ended conversation restores its completion notification');
   let trace=(await fs.readFile(tracePath,'utf8')).trim().split('\n').map(JSON.parse);
   const start=trace.find(m=>m.method==='thread/start');assert.equal(start.params.config['skills.config'][0].path,'/fixture/skill');
@@ -42,7 +45,11 @@ try{
   assert.equal(typeof trace.find(m=>String(m.id).startsWith('clock-')&&m.result)?.result.currentTimeAt,'number');
   const approval=await task('approve');await until(async()=>(await state(approval.id)).request);await api('/answer',{id:'approval-1',accept:false});
   await api('/message',{id:approval.id,text:'steering fixture'});await api('/stop',{id:approval.id,children:true});assert.equal((await state(approval.id)).status,'interrupted');
+  await until(async()=>(await state(approval.id)).conversation.some(e=>e.text==='steering fixture'&&e.nativeId));
+  assert.equal((await state(approval.id)).conversation.filter(e=>e.text==='steering fixture').length,1,'delayed native echo merges with accepted input');
   const question=await task('question');await api('/answer',{id:'question-1',answers:{color:'green'}});await api('/stop',{id:question.id});
+  assert.deepEqual((await state(question.id)).conversation.map(e=>e.role),['user','assistant','user']);
+  assert((await state(question.id)).conversation.at(-1).text.endsWith('green'),'question answers remain in the conversation');
   const queued=await task('queued');assert.equal((await state(queued.id)).request.id,'queued-1');
   await api('/answer',{id:'queued-1',accept:false});assert.equal((await state(queued.id)).request.id,'queued-2','parallel approvals must remain available in order');
   await api('/stop',{id:queued.id});assert.equal((await state(queued.id)).request,null);assert.equal((await state(queued.id)).status,'interrupted');
@@ -79,7 +86,23 @@ try{
 	await api('/finish',{id:parent.id});
 	assert((await api('/state')).tasks.filter(t=>t.id===parent.id||t.parentId===parent.id).every(t=>t.endedAt),'ending a settled team clears all its completion markers');
   const racing=await Promise.allSettled([task('hold'),task('hold')]);assert.equal(racing.filter(x=>x.status==='fulfilled').length,1);
+  const held=racing.find(x=>x.status==='fulfilled').value;
+  for(let i=0;i<2;i++){
+    await api('/message',{id:held.id,text:'legacy echo'});
+    await until(async()=>(await state(held.id)).conversation.filter(e=>e.text==='legacy echo'&&e.nativeId).length===i+1);
+  }
+  assert.equal((await state(held.id)).conversation.filter(e=>e.text==='legacy echo').length,2,'identical intentional inputs remain distinct without client IDs');
+  await assert.rejects(api('/message',{id:held.id,text:'reject this input'}),/Fixture rejected input/);
+  assert(!(await state(held.id)).conversation.some(e=>e.text==='reject this input'),'failed send does not leave a delivered-looking message');
   await shutdown();await launch();assert((await api('/state')).tasks.every(t=>!['running','starting','working'].includes(t.status)));
+  assert.deepEqual((await state(done.id)).conversation,completedConversation,'full conversation survives restart');
+	await shutdown();
+	const saved=JSON.parse(await fs.readFile(path.join(data,'tasks.json'),'utf8'));
+	const legacy=saved.find(t=>t.id===done.id);delete legacy.conversation;delete legacy.conversationVersion;
+	await fs.writeFile(path.join(data,'tasks.json'),JSON.stringify(saved));await launch();
+	const recovered=(await api('/conversation?id='+done.id)).task;
+	assert.deepEqual(recovered.conversation.map(e=>[e.role,e.text]),completedConversation.map(e=>[e.role,e.text]),'old tasks recover interleaving from original thread history');
+	assert.equal(recovered.conversationVersion,1);assert.equal(recovered.conversationNotice,undefined);
 	assert((await api('/state')).tasks.filter(t=>t.id===parent.id||t.parentId===parent.id).every(t=>t.endedAt),'ended state survives bridge restart');
   trace=(await fs.readFile(tracePath,'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(trace.find(m=>m.id==='approval-1'&&m.result).result.decision,'decline');

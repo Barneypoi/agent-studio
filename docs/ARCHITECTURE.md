@@ -1,11 +1,13 @@
 # 实现结构
 
 - `game/main.gd`：Godot 原生界面、可调宽度的房间与对话侧栏、人物编辑、技能与任务操作。对话面板按任务保留输入草稿和阅读位置，与场景共用主视口；设置类窗口使用独立弹窗。
+- `game/conversation_view.gd`：按消息 ID 更新左右气泡，支持文本选择、完整对话复制和阅读位置保留；工具记录继续使用独立文本视图。
 - `game/world.gd`：绘制俯视像素场景、角色移动与入座/离座状态、地图交互。角色在可行走的椅侧入口结束寻路，再过渡到坐姿；坐姿、名称和点击区域共用显示位置，椅背独立绘制以正确遮挡人物。
 - `game/pixel_art.gd`：自绘角色和家具，所有像素美术均包含在源码中。
 - `game/studio_model.gd`：房间/家具数据、连通性校验、寻路、撤销与原子存档。
 - `bridge/server.mjs`：Node.js 标准库实现的本地桥接，不依赖 npm 包。
 - `bridge/approvals.mjs`：将原生审批选项转换成带授权范围的界面选项；提交时按待审批请求重新解析选择，拒绝无效选项，不接受前端自拟规则。
+- `bridge/conversation.mjs`：保存有序的用户/角色消息，按 `clientUserMessageId`、原生 turn/item ID 合并回显、流式输出和完成事件；失败的追加输入撤回。首次打开旧任务通过 `/conversation` 读取本机原始历史迁移，无法恢复时展示带说明的旧版记录。
 
 桥接仅监听 127.0.0.1 的随机端口，用每次启动生成的随机 token 鉴权，并拒绝来自浏览器 Origin 的请求。Godot 使用 HTTPRequest 发送指令并轮询快照；桥接通过 JSONL RPC 连接 Codex App Server。
 

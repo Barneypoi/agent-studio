@@ -515,6 +515,11 @@ func _open_task(id:String) -> void:
 	if not task_panels.has(id):task_panels[id]=_create_task_panel(task)
 	var panel=task_panels[id];panel.show();_update_task_panel(panel,task)
 	panel.get_meta("input").grab_focus()
+	if connected and task.get("conversationVersion",0)!=1:
+		_api("/conversation?id="+id.uri_encode(),{},func(r):
+			for i in range(tasks.size()):
+				if tasks[i].id==id:tasks[i]=r.task
+			_update_task_panel(panel,r.task),HTTPClient.METHOD_GET)
 
 func _create_task_panel(task:Dictionary) -> VBoxContainer:
 	var id=str(task.id)
@@ -524,10 +529,10 @@ func _create_task_panel(task:Dictionary) -> VBoxContainer:
 	var title=label(task.name+" · 对话",20);title.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS;title.tooltip_text=title.text;identity.add_child(title)
 	var status=wrapped(_status_text(task),13);status.max_lines_visible=2;identity.add_child(status)
 	var close=button("收起",_close_task);close.tooltip_text="返回侧栏，保留尚未发送的内容";head.add_child(close)
-	var prompt=label(task.prompt.replace("\n"," "),13,MUTED);prompt.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS;prompt.tooltip_text=task.prompt;v.add_child(prompt)
 	var mode=row(v);var content_mode=OptionButton.new();content_mode.fit_to_longest_item=false;content_mode.size_flags_horizontal=Control.SIZE_EXPAND_FILL;content_mode.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
-	for title_value in ["回复与成果","工具记录","任务计划","本次角色与技能"]:content_mode.add_item(title_value)
+	for title_value in ["对话记录","工具记录","任务计划","本次角色与技能"]:content_mode.add_item(title_value)
 	mode.add_child(content_mode)
+	var chat=preload("res://conversation_view.gd").new();v.add_child(chat);v.set_meta("chat",chat)
 	var output=TextEdit.new();output.editable=false;output.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY;output.size_flags_vertical=Control.SIZE_EXPAND_FILL;output.custom_minimum_size.y=100;v.add_child(output)
 	mode.add_child(button("复制",func():DisplayServer.clipboard_set(output.text);toast("内容已复制")))
 	var directory=button("工作目录",func():OS.shell_open(task.workspace));directory.tooltip_text=task.workspace;mode.add_child(directory)
@@ -537,7 +542,7 @@ func _create_task_panel(task:Dictionary) -> VBoxContainer:
 	var request_scroll=ScrollContainer.new();request_scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED;request_scroll.custom_minimum_size.y=170;request_scroll.visible=false;v.add_child(request_scroll)
 	var request_box=VBoxContainer.new();request_box.size_flags_horizontal=Control.SIZE_EXPAND_FILL;request_scroll.add_child(request_box)
 	var text_input=TextEdit.new();text_input.placeholder_text="补充指令，或继续这个任务…";text_input.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY;text_input.custom_minimum_size.y=80;v.add_child(text_input)
-	var actions=row(v);actions.add_child(button("发送补充 / 继续",func():_api("/message",{"id":id,"text":text_input.text},func(r):text_input.text="";toast("指令已交给负责人转达" if r.has("routedTo") else "指令已送达")),true))
+	var actions=row(v);actions.add_child(button("发送补充 / 继续",func():_api("/message",{"id":id,"text":text_input.text},func(r):text_input.text="";_poll_bridge();toast("指令已交给负责人转达" if r.has("routedTo") else "指令已送达")),true))
 	actions.get_child(0).size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	var stop=button("停止任务",func():_api("/stop",{"id":id,"children":true},func(_r):toast("已请求停止任务和它的子任务")));actions.add_child(stop)
 	var finish=button("结束对话",func():_finish_task(id));actions.add_child(finish)
@@ -557,9 +562,20 @@ func _update_task_panel(d:Control,t:Dictionary) -> void:
 	d.get_meta("finish").tooltip_text="还有子任务未结束，请先等待完成或停止任务" if unsettled else "清除完成标记，让伙伴恢复待命；对话记录仍然保留"
 	d.get_meta("status").text=_status_text(t)+(" · "+str(t.get("activity","")) if ACTIVE.has(t.status) else "")
 	d.get_meta("status").tooltip_text=d.get_meta("status").text
+	var show_chat=d.get_meta("mode").selected==0
+	d.get_meta("chat").visible=show_chat;d.get_meta("output").visible=not show_chat
 	var content=""
 	match d.get_meta("mode").selected:
-		0:content=str(t.get("result","")) if not ACTIVE.has(t.status) else str(t.get("messages",""));if content=="":content=str(t.get("messages",""))
+		0:
+			var entries=t.get("conversation",[]).duplicate(true)
+			if not t.has("conversation"):
+				if t.get("prompt","")!="":entries.append({"id":"prompt","role":"user","text":t.prompt})
+				var reply=str(t.get("messages",""));if reply=="":reply=str(t.get("result",""))
+				if reply!="":entries.append({"id":"reply","role":"assistant","text":reply})
+			var notice=str(t.get("conversationNotice",""))
+			if t.get("error","")!="":notice+=("\n" if notice!="" else "")+"错误："+str(t.error)
+			d.get_meta("chat").set_messages(entries,str(t.name),notice)
+			content=preload("res://conversation_view.gd").transcript(entries,str(t.name))
 		1:
 			for l in t.get("logs",[]):content+="[ "+str(l.label)+" ]\n"+str(l.text)+"\n\n"
 		2:content=str(t.get("plan","尚无公开任务计划"))

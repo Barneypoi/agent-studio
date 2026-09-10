@@ -1,6 +1,6 @@
 {
-  "bridgeSha256": "8e9d67ff8497389c6760859e18af85005fe750f07583d9ce868ac4ba601338cc",
-  "gamePackSha256": "9c171b3d116e2f8496fddc7bc0b7acddb1de17b4b8bee347241af8cffd198d98",
+  "bridgeSha256": "314555ee35f6529f792ffd8d73ec3e0844313d4eb1141d64b370829ad56f9bf5",
+  "gamePackSha256": "159a958984995401b05a87f686875e4962fbabeaba2b33e93a6502eb095018ca",
   "godot": "4.7.2",
   "node": "26.3.1",
   "codexTested": "0.153.4",
@@ -33,5 +33,15 @@
     "renderChecks": 21,
     "mode": "offline fixture, packaged GodotEngine and exported game.pck",
     "realPolicyPersistence": "not exercised; no real authorization rules created"
+  },
+  "conversationModuleSha256": "cf29f92e26959bcc142feb94a914602ce9f410b2042babe602982054352e694b",
+  "conversationValidation": {
+    "date": "2026-09-10",
+    "change": "interleaved user and partner message bubbles with persisted history",
+    "uiChecks": 31,
+    "renderChecks": 16,
+    "bridgeRegression": "passed (offline)",
+    "mode": "offline fixture, packaged GodotEngine and exported game.pck",
+    "realHistoryRecovery": "not exercised against user data; protocol fixture verified"
   }
 }

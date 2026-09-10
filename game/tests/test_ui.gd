@@ -65,8 +65,22 @@ func run() -> void:
 	var panel=app.task_panels["fixture-task"]
 	verify(panel.get_meta("finish").visible and not panel.get_meta("stop").visible,"completed conversation offers End instead of Stop")
 	verify(panel.get_meta("output").text.contains("离线记录"),"task output is rendered")
+	app.tasks[0].conversation=[{"id":"user-1","role":"user","text":"请布置一个阅读角。"},{"id":"agent-1","role":"assistant","text":"保留窗边光线，书架靠墙。\n".repeat(40)},{"id":"user-2","role":"user","text":"再加一盆绿植。"},{"id":"agent-2","role":"assistant","text":"好的，放在书架旁。"}]
+	app._update_task_panel(panel,app.tasks[0])
+	for i in range(8):await process_frame
+	var chat=panel.get_meta("chat")
+	verify(chat.visible and not panel.get_meta("output").visible and chat.bubbles.size()==4,"conversation presents both inputs and both replies as bubbles")
+	verify(chat.bubbles["user-2"].panel.position.x>chat.bubbles["agent-2"].panel.position.x,"user bubbles align right and partner replies left")
+	verify(panel.get_meta("output").text.contains("你\n再加一盆绿植。\n\n晴川\n好的"),"copy transcript includes speakers and interleaved messages")
+	verify(chat.scroll_vertical>=chat.get_v_scroll_bar().max_value-chat.get_v_scroll_bar().page-4,"new conversation opens at its latest message")
+	chat.scroll_vertical=0
+	app.tasks[0].conversation[3].text+=" 我继续整理。"
+	var first_bubble=chat.bubbles["user-1"].body
+	app._update_task_panel(panel,app.tasks[0])
+	for i in range(8):await process_frame
+	verify(chat.scroll_vertical==0 and chat.bubbles["user-1"].body==first_bubble,"stream updates preserve an earlier reading position and existing message nodes")
 	panel.get_meta("mode").select(1);panel.get_meta("mode").item_selected.emit(1)
-	verify(panel.get_meta("output").text.contains("fixture"),"tool log tab renders records")
+	verify(panel.get_meta("output").text.contains("fixture") and not chat.visible and panel.get_meta("output").visible,"tool log tab renders records")
 	for i in range(3):await process_frame
 	verify(panel.get_parent()==app.sidebar and not app.world.get_global_rect().intersects(panel.get_global_rect()),"conversation occupies its own column without covering the room")
 	var time_before=app.world.elapsed
