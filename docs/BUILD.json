@@ -1,6 +1,6 @@
 {
-  "bridgeSha256": "314555ee35f6529f792ffd8d73ec3e0844313d4eb1141d64b370829ad56f9bf5",
-  "gamePackSha256": "159a958984995401b05a87f686875e4962fbabeaba2b33e93a6502eb095018ca",
+  "bridgeSha256": "36f544f935443ce800818d358925849262ed0a8d40d3051c2af00a87eb5297ea",
+  "gamePackSha256": "acb57b7b331bd0860a4cf784d60c688aeb1f6be01af463faa479510ec95cb833",
   "godot": "4.7.2",
   "node": "26.3.1",
   "codexTested": "0.153.4",
@@ -43,5 +43,68 @@
     "bridgeRegression": "passed (offline)",
     "mode": "offline fixture, packaged GodotEngine and exported game.pck",
     "realHistoryRecovery": "not exercised against user data; protocol fixture verified"
+  },
+  "delegationValidation": {
+    "date": "2026-09-10",
+    "change": "creator-owned completion; supplements never transfer delegated ownership",
+    "uiChecks": 35,
+    "renderChecks": 22,
+    "bridgeRegression": "passed (offline)",
+    "mode": "offline fixture, packaged GodotEngine and exported game.pck",
+    "nativeCloseAgent": "protocol events verified with fixture; not repeated with real Codex"
+  },
+  "delegationReleaseFix": {
+    "date": "2026-09-10",
+    "reproduction": "sanitized persisted relay record failed before fix and passed after fix",
+    "uiChecks": 35,
+    "renderChecks": 22,
+    "bridgeRegression": "passed (offline)",
+    "legacyOwnership": "repaired from original parent relation",
+    "liveExistingTasks": "verified: delegated characters released after restart; original conversation, results and layout unchanged; no new model turns"
+  },
+  "leisureValidation": {
+    "date": "2026-09-10",
+    "change": "reachable furniture activities with interruption, occupancy and directional sofa seating",
+    "worldChecks": 44,
+    "modelChecks": 19,
+    "uiChecks": 35,
+    "renderChecks": 12,
+    "mode": "offline, exported game.pck and packaged GodotEngine",
+    "realModelTurns": 0,
+    "liveApp": "restarted and observed idle partners using facilities beside an existing conversation; tasks and saved layout byte-for-byte unchanged"
+  },
+  "decorationValidation": {
+    "date": "2026-09-10",
+    "change": "13 new furniture items, 3 furnished room templates, 3 floor styles and additional idle activities",
+    "modelChecks": 34,
+    "worldChecks": 76,
+    "uiChecks": 38,
+    "renderChecks": 13,
+    "mode": "offline, exported game.pck and packaged GodotEngine",
+    "realModelTurns": 0,
+    "liveApp": "restarted and verified theme buttons and furniture category in the existing app; task history and saved layout byte-for-byte unchanged"
+  },
+  "socialValidation": {
+    "date": "2026-09-10",
+    "change": "local-only social meetings, alternating bubbles, greetings, high-fives, snacks, solo gestures and completion encouragement",
+    "socialChecks": 22,
+    "worldChecks": 76,
+    "uiChecks": 39,
+    "renderChecks": 7,
+    "mode": "offline, exported game.pck and packaged GodotEngine",
+    "realModelTurns": 0,
+    "liveApp": "restarted; greeting button clicked and response confirmed; task history and saved layout byte-for-byte unchanged"
+  },
+  "sessionImportsModuleSha256": "641809634e0066dfaf376ec4f3e335e70a22ce2e849dd6ddf5d2512633e47e7b",
+  "sessionImportValidation": {
+    "date": "2026-09-11",
+    "uiChecks": 40,
+    "renderChecks": 11,
+    "bridgeRegression": "passed (offline)",
+    "nativeCodex": "0.153.4",
+    "realModelTurns": 2,
+    "realTestScope": "fresh conversations in an isolated project test directory",
+    "realResult": "native list and preview; original and fork imported idle; explicit fork continuation recalled prior context; original native history unchanged",
+    "liveApp": "updated and restarted; native history browser visibly populated; task history and saved layout byte-for-byte unchanged; no user conversation imported or messaged"
   }
 }

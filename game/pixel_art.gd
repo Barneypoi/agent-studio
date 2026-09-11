@@ -1,5 +1,6 @@
 extends RefCounted
 const Model = preload("res://studio_model.gd")
+const Decor = preload("res://decor_art.gd")
 
 static func r(c:CanvasItem,p:Vector2,s:float,x:float,y:float,w:float,h:float,col) -> void:
 	c.draw_rect(Rect2(p+Vector2(x,y)*s,Vector2(w,h)*s),Color(col) if col is String else col)
@@ -7,7 +8,7 @@ static func r(c:CanvasItem,p:Vector2,s:float,x:float,y:float,w:float,h:float,col
 static func side_rect(c:CanvasItem,p:Vector2,s:float,facing:int,x:float,y:float,w:float,h:float,col) -> void:
 	r(c,p,s,24-x-w if facing==3 else x,y,w,h,col)
 
-static func person(c:CanvasItem,p:Dictionary,pos:Vector2,s:float=1.0,phase:float=0.0,state:String="idle",moving:bool=false,seated:bool=false,facing:int=2,part:String="all") -> void:
+static func person(c:CanvasItem,p:Dictionary,pos:Vector2,s:float=1.0,phase:float=0.0,state:String="idle",moving:bool=false,seated:bool=false,facing:int=2,part:String="all",oriented:bool=false,gesture_kind:String="") -> void:
 	var shirt=Color(Model.SHIRTS[posmod(int(p.get("shirt",0)),Model.SHIRTS.size())])
 	var hair=Color(Model.HAIRS[posmod(int(p.get("hair_color",0)),Model.HAIRS.size())])
 	var skin=Color(Model.SKINS[posmod(int(p.get("skin",0)),Model.SKINS.size())])
@@ -34,8 +35,22 @@ static func person(c:CanvasItem,p:Dictionary,pos:Vector2,s:float=1.0,phase:float
 		r(c,origin,s,5,30+stride,6,2,"303948");r(c,origin,s,14,30-stride,6,2,"303948")
 		r(c,origin,s,5,15,15,12,shirt.darkened(.22));r(c,origin,s,6,15,12,11,shirt)
 	r(c,origin,s,9,15,5,2,"f4dec1");r(c,origin,s,9,17,5,2,shirt.lightened(.2))
-	if seated:
-		var typing=state in ["starting","running","working"]
+	if gesture_kind in ["wave","highfive"]:
+		var side=3 if gesture_kind=="highfive" and facing==3 else 1
+		var sway=round(sin(phase*10)) if gesture_kind=="wave" else 0.0
+		side_rect(c,origin,s,side,2,17,4,8,shirt.darkened(.12));side_rect(c,origin,s,side,3,24,3,3,skin)
+		side_rect(c,origin,s,side,19,13,6,6,shirt);side_rect(c,origin,s,side,23,9,4,6,skin)
+		side_rect(c,origin,s,side,23+sway,5,4,5,skin)
+	elif gesture_kind=="stretch":
+		for side in [1,3]:
+			side_rect(c,origin,s,side,19,11,4,8,shirt);side_rect(c,origin,s,side,20,5,3,7,skin)
+			side_rect(c,origin,s,side,18,2,5,4,skin)
+	elif gesture_kind=="tidy":
+		for side in [1,3]:
+			side_rect(c,origin,s,side,18,17,4,6,shirt.darkened(.12));side_rect(c,origin,s,side,15,18,5,4,shirt)
+			side_rect(c,origin,s,side,14,15+round(sin(phase*6)),4,4,skin)
+	elif seated or (oriented and state in ["piano","paint","play"]):
+		var typing=state in ["starting","running","working"] or (oriented and state in ["piano","paint","play"])
 		var tap=1.0 if typing and sin(phase*12)>0 else 0.0
 		if facing==0:
 			r(c,origin,s,2,12,4,9,shirt.darkened(.12));r(c,origin,s,19,12,4,9,shirt.darkened(.12))
@@ -53,7 +68,8 @@ static func person(c:CanvasItem,p:Dictionary,pos:Vector2,s:float=1.0,phase:float
 	r(c,origin,s,7,3,11,13,skin.darkened(.08));r(c,origin,s,6,5,14,8,skin)
 	r(c,origin,s,7,4,11,9,skin.lightened(.06));r(c,origin,s,8,12,8,3,skin)
 	r(c,origin,s,10,13,3,1,"bb7d6c")
-	r(c,origin,s,8,8,2,2,"403c43");r(c,origin,s,15,8,2,2,"403c43")
+	var blink=not moving and state=="idle" and fmod(phase,6.8)<.13
+	r(c,origin,s,8,9 if blink else 8,2,1 if blink else 2,"403c43");r(c,origin,s,15,9 if blink else 8,2,1 if blink else 2,"403c43")
 	r(c,origin,s,7,11,2,1,"de9d8d");r(c,origin,s,16,11,2,1,"de9d8d")
 	var style=int(p.get("hair",0))
 	r(c,origin,s,7,0,11,3,hair);r(c,origin,s,5,2,15,4,hair);r(c,origin,s,5,5,3,5,hair)
@@ -64,17 +80,17 @@ static func person(c:CanvasItem,p:Dictionary,pos:Vector2,s:float=1.0,phase:float
 		r(c,origin,s,3,5,3,11,hair);r(c,origin,s,19,5,3,11,hair);r(c,origin,s,20,8,2,9,hair.darkened(.15))
 	elif style==3:
 		r(c,origin,s,3,1,5,4,hair);r(c,origin,s,19,1,4,4,hair);r(c,origin,s,18,4,4,12,hair)
-	if seated and facing==0:
+	if (seated or oriented) and facing==0:
 		r(c,origin,s,5,4,15,10,hair);r(c,origin,s,7,4,11,3,hair.lightened(.08))
 		r(c,origin,s,8,13,9,2,hair.darkened(.1));r(c,origin,s,10,15,5,2,skin)
-	elif seated and facing in [1,3]:
+	elif (seated or oriented) and facing in [1,3]:
 		r(c,origin,s,5 if facing==1 else 13,4,7,10,hair)
 		r(c,origin,s,19 if facing==1 else 4,9,2,3,skin)
 	var accessory=int(p.get("accessory",0))
 	if accessory==1:
-		if seated and facing==0:
+		if (seated or oriented) and facing==0:
 			r(c,origin,s,4,8,2,2,"526075");r(c,origin,s,20,8,2,2,"526075")
-		elif seated and facing in [1,3]:
+		elif (seated or oriented) and facing in [1,3]:
 			var lens=14 if facing==1 else 6;r(c,origin,s,lens,8,5,3,"526075");r(c,origin,s,lens+1,9,3,1,"bad7d2")
 		else:
 			r(c,origin,s,7,8,5,3,"526075");r(c,origin,s,14,8,5,3,"526075");r(c,origin,s,8,9,3,1,"bad7d2");r(c,origin,s,15,9,3,1,"bad7d2");r(c,origin,s,12,8,2,1,"526075")
@@ -140,8 +156,70 @@ static func desk(c:CanvasItem,center:Vector2,facing:int,foreground:bool=false) -
 		c.draw_colored_polygon(frame,Color("374c51"));c.draw_colored_polygon(screen,Color("7ea9a1"))
 		for y in [-25,-20,-15]:c.draw_line(monitor+Vector2(-3*flip,y),monitor+Vector2(3*flip,y+2),Color("c0d9c3"),1)
 
-static func furniture(c:CanvasItem,kind:String,pos:Vector2,s:float=1.0,include_chair:bool=true) -> void:
+static func sofa_block(c:CanvasItem,center:Vector2,facing:int,rect:Rect2,height:float,color:String) -> void:
+	var points=[]
+	for point in [rect.position,rect.position+Vector2(rect.size.x,0),rect.end,rect.position+Vector2(0,rect.size.y)]:points.append(center+point.rotated(facing*PI/2).round())
+	for index in range(4):
+		var a=points[index];var b=points[(index+1)%4]
+		c.draw_colored_polygon(PackedVector2Array([a,b,b-Vector2(0,height),a-Vector2(0,height)]),Color(color).darkened(.2))
+	desk_plane(c,center,facing,rect,height,color)
+
+static func sofa(c:CanvasItem,center:Vector2,facing:int,foreground:bool=false) -> void:
+	facing=posmod(facing,4)
+	if not foreground:
+		sofa_block(c,center,facing,Rect2(-60,-12,120,32),4,"70938a")
+		for x in [-48,2]:desk_plane(c,center,facing,Rect2(x,-8,46,23),5,"80a59b")
+	# The rear and near arm remain upright when the footprint rotates.
+	if foreground==(facing==2):sofa_block(c,center,facing,Rect2(-56,-20,112,8),12,"80a59b")
+	for side in [-1,1]:
+		var near_arm=(facing==1 and side==1) or (facing==3 and side==-1)
+		if foreground==near_arm:sofa_block(c,center,facing,Rect2(-60 if side==-1 else 48,-12,12,32),12,"9bb9a6")
+
+static func pastime(c:CanvasItem,p:Dictionary,pos:Vector2,action:String,phase:float,target:Vector2) -> void:
+	var skin=Color(Model.SKINS[posmod(int(p.get("skin",0)),Model.SKINS.size())])
+	var shirt=Color(Model.SHIRTS[posmod(int(p.get("shirt",0)),Model.SHIRTS.size())])
+	match action:
+		"read":
+			r(c,pos,1.65,-8,-15,16,10,"805e4b");r(c,pos,1.65,-7,-15,6,8,"f5e5bd");r(c,pos,1.65,1,-15,6,8,"ead4a4")
+			for y in [-13,-10]:r(c,pos,1.65,-6,y,4,1,"a6af91");r(c,pos,1.65,2,y,4,1,"a6af91")
+			if sin(phase*1.2)>0:r(c,pos,1.65,0,-15,2,8,"fff0cc")
+			for x in [-9,7]:r(c,pos,1.65,x,-12,2,3,skin)
+		"coffee", "tea":
+			var cup=pos+Vector2(10,-21-(sin(phase*1.5)+1)*5)
+			c.draw_line(pos+Vector2(14,-12),cup+Vector2(8,8),shirt,5)
+			r(c,cup,1,7,5,4,4,skin)
+			r(c,cup,1,-5,0,10,11,"f5e5bd");r(c,cup,1,5,2,4,6,"d9bd8f");r(c,cup,1,-3,1,6,2,"986b50")
+			for index in range(2):r(c,cup,1,-2+index*4,-7-fmod(phase*5+index*3,7),2,3,Color(.96,.92,.8,.6))
+		"water":
+			var side=-1 if target.x<pos.x else 1
+			var can=pos+Vector2(side*18,-19)
+			c.draw_line(pos+Vector2(side*14,-11),can+Vector2(0,-4),shirt,5)
+			r(c,can,1,-7,-4,14,12,"7ca6aa");r(c,can,1,-5,-8,8,4,"b5d3c8");r(c,can,1,6 if side==1 else -12,-2,7,4,"7ca6aa")
+			r(c,can,1,-2,-8,5,3,skin)
+			var start=can+Vector2(side*12,0);var end=target+Vector2(0,-12)
+			for index in range(4):
+				var drop=start.lerp(end,fmod(phase*.65+index*.25,1))
+				c.draw_rect(Rect2(drop,Vector2(2,3)),Color("bbdfd8"))
+		"rest":
+			var rise=fmod(phase*5,12)
+			c.draw_line(pos+Vector2(20,-49-rise),pos+Vector2(25,-49-rise),Color("e8dbb4"),2)
+			c.draw_line(pos+Vector2(25,-49-rise),pos+Vector2(20,-44-rise),Color("e8dbb4"),2)
+			c.draw_line(pos+Vector2(20,-44-rise),pos+Vector2(25,-44-rise),Color("e8dbb4"),2)
+		"music", "piano":
+			for i in range(2):
+				var note=pos+Vector2(22+i*12,-38-fmod(phase*8+i*10,24))
+				r(c,note,1,-3,0,6,3,"e9c689");r(c,note,1,1,-9,2,10,"e9c689");r(c,note,1,2,-9,4,2,"e9c689")
+		"play":
+			var hand=pos+Vector2(14,-23+round(sin(phase*12))*2)
+			c.draw_line(pos+Vector2(14,-12),hand,shirt,5);r(c,hand,1,-2,-2,4,4,skin)
+		"paint":
+			var hand=pos+Vector2(17,-24+round(sin(phase*3)*4))
+			c.draw_line(pos+Vector2(13,-12),hand,shirt,5);r(c,hand,1,-2,-2,4,4,skin);r(c,hand,1,0,-11,2,10,"be946f");r(c,hand,1,-1,-14,4,4,"a9bd9d")
+			c.draw_circle(pos+Vector2(-14,-18),7,Color("e3c59b"));r(c,pos,1,-17,-21,3,3,"c88c85");r(c,pos,1,-12,-17,3,3,"7d9e9b")
+
+static func furniture(c:CanvasItem,kind:String,pos:Vector2,s:float=1.0,include_chair:bool=true,phase:float=0) -> void:
 	var f=Model.CATALOG[kind];var w=float(f.w)*20;var h=float(f.h)*20
+	if Decor.KINDS.has(kind):Decor.draw(c,kind,pos+Vector2(w,h)*s/2,s/2,0,phase);return
 	if kind=="rug":
 		r(c,pos,s,0,0,w,h,"c18770");r(c,pos,s,2,2,w-4,h-4,"e0b799");r(c,pos,s,5,5,w-10,h-10,"a4b6a0")
 		for x in range(7,int(w)-6,6):r(c,pos,s,x,8,2,h-16,"cdd1b0")

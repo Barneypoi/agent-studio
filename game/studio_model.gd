@@ -1,4 +1,5 @@
 extends RefCounted
+const Themes=preload("res://room_themes.gd")
 
 const CATALOG = {
 	"desk": {"name":"研究工位", "w":2, "h":2, "solid":true, "desc":"绑定伙伴，作为它的日常工位。"},
@@ -9,8 +10,22 @@ const CATALOG = {
 	"board": {"name":"任务白板", "w":2, "h":1, "solid":true, "desc":"点击白板查看任务与交付。"},
 	"coffee": {"name":"咖啡吧台", "w":2, "h":1, "solid":true, "desc":"工作之间，补充一点灵感。"},
 	"lamp": {"name":"落地灯", "w":1, "h":1, "solid":true, "desc":"一盏温暖的小灯。"},
-	"cabinet": {"name":"成果柜", "w":2, "h":1, "solid":true, "desc":"点击打开工作目录。"}
+	"cabinet": {"name":"成果柜", "w":2, "h":1, "solid":true, "desc":"点击打开工作目录。"},
+	"piano":{"name":"胡桃木钢琴","w":2,"h":1,"solid":true,"desc":"空闲伙伴会来弹一段小曲。"},
+	"record":{"name":"黑胶唱片机","w":2,"h":1,"solid":true,"desc":"旋转的唱片与轻轻摇摆的伙伴。"},
+	"arcade":{"name":"复古街机","w":1,"h":1,"solid":true,"desc":"工作之余，来挑战一局像素小游戏。"},
+	"aquarium":{"name":"微光水族箱","w":2,"h":1,"solid":true,"desc":"小鱼与气泡缓缓游动，伙伴会停下来观赏。"},
+	"easel":{"name":"灵感画架","w":1,"h":1,"solid":true,"desc":"空闲时画一幅小小的风景。"},
+	"flowerbed":{"name":"缤纷花圃","w":2,"h":1,"solid":true,"desc":"盛开的花朵，等伙伴来照料。"},
+	"tea":{"name":"花茶小桌","w":2,"h":1,"solid":true,"desc":"一壶花茶、两块点心，歇一小会儿。"},
+	"lantern":{"name":"暖光庭院灯","w":1,"h":1,"solid":true,"desc":"为角落添一点柔和的暖光。"},
+	"display":{"name":"旅行收藏架","w":2,"h":1,"solid":true,"desc":"摆着相框、陶罐和来自远方的小纪念品。"},
+	"screen":{"name":"藤编屏风","w":2,"h":1,"solid":true,"desc":"划出安静的小角落，记得为通道留空。"},
+	"round_rug":{"name":"繁星圆毯","w":3,"h":3,"solid":false,"desc":"可铺在家具下面的柔软圆毯。"},
+	"stone_path":{"name":"花园石径","w":2,"h":2,"solid":false,"desc":"可以行走的石子小路，适合连接庭院角落。"},
+	"fountain":{"name":"涟漪喷泉","w":2,"h":2,"solid":true,"desc":"流动的水与涟漪，伙伴会来听水放空。"}
 }
+const GROUPS={"全部家具":[],"工作与收纳":["desk","books","board","cabinet","display","screen"],"休闲娱乐":["sofa","coffee","tea","piano","record","arcade","easel"],"绿植水景":["plant","flowerbed","aquarium","fountain"],"软装照明":["rug","round_rug","stone_path","lamp","lantern"]}
 const SHIRTS = ["6b9d96", "d29a6a", "9b8cbd", "ca7780", "658bad", "a2a368"]
 const HAIRS = ["493b3b", "82573e", "d6b976", "b9c3c4", "44394e"]
 const SKINS = ["efc3a1", "d9a079", "ad7559", "835743"]
@@ -169,6 +184,7 @@ func remove_furniture(id: String) -> void:
 	data.doors=make_doors(data.rooms,data.furniture);save()
 
 func validate_room(room: Dictionary, ignore_id: String="") -> String:
+	if room.has("template") and not Themes.PRESETS.has(room.template):return "未找到这个房间主题"
 	var rect=rect_of(room)
 	if rect.size.x<4 or rect.size.y<4:return "房间最小为 4 × 4 格"
 	if rect.size.x>24 or rect.size.y>20:return "单个房间最大为 24 × 20 格"
@@ -176,16 +192,24 @@ func validate_room(room: Dictionary, ignore_id: String="") -> String:
 	for r in data.rooms:
 		if r.id!=ignore_id and rect.intersects(rect_of(r)):return "房间不能重叠，请贴着现有房间边缘扩建"
 	var next=data.rooms.filter(func(r):return r.id!=ignore_id).duplicate(true);next.append(room)
-	for f in data.furniture:
+	var contents=Themes.furniture(room)
+	var next_furniture=data.furniture+contents
+	for f in next_furniture:
 		for p in cells(rect_of(f)):
 			if room_at(p,next)=="":return "缩小房间前，请先移走边缘的家具"
-	if not connected(next,data.furniture):return "请让房间边缘相邻，并留出可以连接门的通路"
+	for i in range(next_furniture.size()):
+		for j in range(i+1,next_furniture.size()):
+			var a=next_furniture[i];var b=next_furniture[j]
+			if CATALOG[a.kind].solid and CATALOG[b.kind].solid and rect_of(a).intersects(rect_of(b)):return "主题中的家具发生重叠"
+	if not connected(next,next_furniture):return "请让房间边缘相邻，并留出可以连接门的通路"
 	return ""
 
 func put_room(room: Dictionary, ignore_id: String="") -> bool:
 	last_error=validate_room(room,ignore_id)
 	if last_error!="":return false
-	checkpoint();data.rooms=data.rooms.filter(func(r):return r.id!=ignore_id);data.rooms.append(room.duplicate(true))
+	checkpoint();data.rooms=data.rooms.filter(func(r):return r.id!=ignore_id)
+	var saved_room=room.duplicate(true);saved_room.erase("template");data.rooms.append(saved_room)
+	data.furniture.append_array(Themes.furniture(room))
 	data.doors=make_doors(data.rooms,data.furniture);return save()
 
 func path_to(from: Vector2i,to: Vector2i) -> Array:

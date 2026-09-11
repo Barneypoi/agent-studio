@@ -20,6 +20,12 @@ func run() -> void:
 	await process_frame;await process_frame
 	verify(app.tab=="studio","opens at studio")
 	verify(app.poll_timer.is_stopped(),"offline mode never polls an existing bridge")
+	app._switch_tab("tasks");find_button(app,"导入 Codex 会话").pressed.emit();await process_frame
+	verify(app.tab=="imports" and find_button(app,"搜索")!=null and find_button(app,"导入并查看").disabled,"import opens a read-only browser and cannot submit before preview")
+	find_button(app,"返回任务与成果").pressed.emit();app._switch_tab("studio")
+	var before_greeting=JSON.stringify([app.tasks,app.model.data])
+	find_button(app,"挥挥手").pressed.emit()
+	verify(not app.world.social.effects.is_empty() and JSON.stringify([app.tasks,app.model.data])==before_greeting and app.poll_timer.is_stopped(),"greeting is local and leaves tasks, configuration and bridge polling untouched")
 	app.nav_buttons.build.pressed.emit();await process_frame
 	verify(app.world.mode=="build","build tab changes map interaction")
 	var before=app.model.data.furniture.size()
@@ -30,6 +36,13 @@ func run() -> void:
 	verify(find_button(app,"选择房间位置")!=null,"room creation dialog is functional")
 	find_button(app,"选择房间位置").pressed.emit();app.world.placed.emit(Vector2i(16,2));await process_frame
 	verify(app.model.data.rooms.size()==2,"room dialog and map placement expand studio")
+	var theme_button=find_button(app,"＋ 玻璃花园  ·  8 × 7")
+	theme_button.pressed.emit()
+	verify(app.world.mode=="room" and app.world.placement.template=="garden","theme button starts a furnished room preview")
+	var furniture_before=app.model.data.furniture.size()
+	app.world.placed.emit(Vector2i(23,2));await process_frame
+	verify(app.model.data.rooms.size()==3 and app.model.data.furniture.size()>furniture_before,"theme preview places a complete furnished expansion")
+	app._undo();verify(app.model.data.rooms.size()==2 and app.model.data.furniture.size()==furniture_before,"one UI undo removes the furnished expansion")
 	app.nav_buttons.people.pressed.emit();await process_frame
 	find_button(app,"＋ 新伙伴").pressed.emit();await process_frame
 	verify(app.model.data.profiles.size()==4,"new character button creates profile")
@@ -106,6 +119,15 @@ func run() -> void:
 	verify(panel.get_meta("status").text=="对话已结束" and not panel.get_meta("finish").visible and panel.get_meta("output").text.contains("fixture"),"ended history remains readable")
 	app.tasks[0].erase("endedAt");app.tasks[0].status="running";app._refresh_characters();app._update_task_panel(panel,app.tasks[0])
 	verify(app.world.states[p.id].status=="running" and panel.get_meta("stop").visible and not panel.get_meta("finish").visible,"continuing a conversation restores live character state and Stop")
+	var delegated=app.tasks[0].duplicate(true);delegated.id="delegated-task";delegated.profileId="sub-fixture";delegated.name="临时伙伴";delegated.parentId="fixture-task";delegated.status="completed"
+	app.tasks.append(delegated);app._refresh_characters();app._open_task(delegated.id);await process_frame
+	var delegated_panel=app.task_panels[delegated.id]
+	verify(delegated_panel.get_meta("status").text=="完成 · 待晴川确认" and not delegated_panel.get_meta("finish").visible,"delegated work waits for its assigning agent, without a user End button")
+	verify(app.world.actors.has("sub-fixture"),"completed delegated character remains until owner releases it")
+	delegated.endedAt=456;delegated.endedBy="fixture-task";app._refresh_characters();app._update_task_panel(delegated_panel,delegated)
+	verify(not app.world.actors.has("sub-fixture") and delegated_panel.get_meta("status").text=="已由晴川释放" and delegated_panel.get_meta("output").text.contains("再加一盆绿植"),"owner release removes temporary actor and preserves readable history")
+	delegated.erase("endedAt");delegated.erase("endedBy");delegated.completionOwnerId=null;app._refresh_characters();app._update_task_panel(delegated_panel,delegated)
+	verify(not delegated_panel.get_meta("finish").visible and delegated_panel.get_meta("status").text=="完成 · 待晴川确认","legacy inferred user ownership cannot override the original delegator")
 	var reloaded=load("res://studio_model.gd").new();reloaded.load_data(app.model.save_path)
 	verify(reloaded.data.profiles.size()==4 and reloaded.data.rooms.size()==2,"UI changes survive reload")
 	print("UI_CHECKS_OK ",checks)

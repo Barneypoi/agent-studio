@@ -26,3 +26,10 @@ codex-logs/
 !/docs/previews/approval-session.png
 !/docs/previews/conversation-bubbles.png
 !/docs/previews/conversation-bubbles-narrow.png
+!/docs/previews/theme-reading.png
+!/docs/previews/theme-music.png
+!/docs/previews/theme-garden.png
+!/docs/previews/social-highfive.png
+
+native-codex-logs/
+!/docs/previews/session-import.png

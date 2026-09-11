@@ -2,6 +2,8 @@ extends Control
 const Model=preload("res://studio_model.gd")
 const World=preload("res://world.gd")
 const Avatar=preload("res://avatar.gd")
+const Themes=preload("res://room_themes.gd")
+const FurnitureCard=preload("res://furniture_card.gd")
 const ACTIVE=["starting","running","working","waiting","approval","stopping"]
 const INK=Color("2d4745")
 const MUTED=Color("7d897d")
@@ -51,6 +53,7 @@ var last_signature=""
 var poll_timer:Timer
 var build_kind="desk"
 var build_rotation=0
+var build_category="全部家具"
 var started=false
 
 func _ready() -> void:
@@ -179,7 +182,9 @@ func _build_shell() -> void:
 	var left=VBoxContainer.new();left.add_theme_constant_override("separation",0);left.size_flags_horizontal=Control.SIZE_EXPAND_FILL;workspace_split.add_child(left)
 	var mapbar=PanelContainer.new();mapbar.add_theme_stylebox_override("panel",box("203a3c",0,12));left.add_child(mapbar)
 	var tools=row(mapbar);tools.add_child(label("01  /  WORKSHOP",12,Color("b6c9b6")))
-	spacer(tools);tools.add_child(button("−",func():world.zoom=maxf(.4,world.zoom/1.15)))
+	spacer(tools)
+	var greeting=button("挥挥手",func():world.greet());greeting.tooltip_text="向空闲伙伴打招呼 · 本地互动，不消耗 Codex 额度";tools.add_child(greeting)
+	tools.add_child(button("−",func():world.zoom=maxf(.4,world.zoom/1.15)))
 	tools.add_child(button("居中",func():world.center_map()));tools.add_child(button("＋",func():world.zoom=minf(2.1,world.zoom*1.15)))
 	var pin=CheckBox.new();pin.text="窗口置顶";pin.toggled.connect(func(v):DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP,v));tools.add_child(pin)
 	world=World.new();world.model=model;world.size_flags_vertical=Control.SIZE_EXPAND_FILL;world.size_flags_horizontal=Control.SIZE_EXPAND_FILL;left.add_child(world)
@@ -215,7 +220,7 @@ func _clear_panel() -> void:
 	for n in side.get_children():side.remove_child(n);n.queue_free()
 	side_scroll.scroll_vertical=0;live_labels.clear()
 	for key in nav_buttons:
-		nav_buttons[key].add_theme_stylebox_override("normal",box("b8cfbb" if key==tab else "e6e3d5",7,10))
+		nav_buttons[key].add_theme_stylebox_override("normal",box("b8cfbb" if key==tab or (tab=="imports" and key=="tasks") else "e6e3d5",7,10))
 
 func _render_panel() -> void:
 	_clear_panel()
@@ -225,6 +230,8 @@ func _render_panel() -> void:
 		"people":_people_panel()
 		"skills":_skills_panel()
 		"tasks":_tasks_panel()
+		"imports":
+			var view=preload("res://session_import_view.gd").new();side.add_child(view);view.setup(self)
 
 func _profile(id:String) -> Dictionary:
 	for p in model.data.profiles:
@@ -239,6 +246,15 @@ func _task_for(id:String) -> Dictionary:
 
 func _task_ended(t:Dictionary) -> bool:
 	return t.get("endedAt",0)!=0 and t.get("status","") in ["completed","failed","interrupted"]
+
+func _delegated(t:Dictionary) -> bool:
+	return t.get("parentId")!=null
+
+func _owner_name(t:Dictionary) -> String:
+	var id=t.get("endedBy",t.get("parentId"))
+	for owner in tasks:
+		if owner.id==id:return str(owner.name)
+	return "委派 agent"
 
 func _task_family(id:String) -> Array:
 	var ids=[id];var index=0
@@ -255,7 +271,9 @@ func _prefer_task(candidate:Dictionary,current:Dictionary) -> bool:
 
 func _status_text(t:Dictionary) -> String:
 	if t.is_empty():return "待命 · 随时可以开工"
-	if _task_ended(t):return "对话已结束"+({"failed":" · 执行失败","interrupted":" · 已停止"}.get(t.status,""))
+	if t.has("imported") and not t.imported.get("continued",false) and _task_ended(t):return "已导入 · 尚未继续"
+	if _task_ended(t):return ("已由"+_owner_name(t)+"释放" if t.get("endedBy") else "对话已结束")+({"failed":" · 执行失败","interrupted":" · 已停止"}.get(t.status,""))
+	if t.status=="completed" and _delegated(t):return "完成 · 待"+_owner_name(t)+"确认"
 	return {"starting":"准备开始","running":"正在工作","working":"正在工作","approval":"等待审批","waiting":"需要你的回答","completed":"完成 · 待验收","failed":"执行失败","interrupted":"已停止","stopping":"正在停止","disconnected":"连接中断 · 状态未知"}.get(t.status,t.status)
 
 func _studio_panel() -> void:
@@ -281,14 +299,6 @@ func _studio_panel() -> void:
 
 func _build_panel() -> void:
 	section("布置你的工作室")
-	note("家具按格摆放。绿色可放置，红色表示重叠或堵住了通路。")
-	var grid=GridContainer.new();grid.columns=2;grid.add_theme_constant_override("h_separation",8);grid.add_theme_constant_override("v_separation",8);side.add_child(grid)
-	for kind in Model.CATALOG:
-		var c=Model.CATALOG[kind];var b=button(c.name+"\n"+str(c.w)+" × "+str(c.h),func():_begin_furniture(kind));b.custom_minimum_size=Vector2(146,62);grid.add_child(b)
-	side.add_child(HSeparator.new());side.add_child(label("房间扩建",17))
-	var r=row(side);r.add_child(button("＋ 新房间",_new_room));r.add_child(button("取消放置",_cancel_placement))
-	for room in model.data.rooms:
-		side.add_child(button(room.name+"  ·  "+str(int(room.w))+" × "+str(int(room.h)),func():_room_dialog(room.id)))
 	if selected_furniture!="":
 		var f={}
 		for item in model.data.furniture:
@@ -307,11 +317,34 @@ func _build_panel() -> void:
 						if item.get("owner","")==owner and owner!="":item.owner=""
 					f.owner=owner;model.save();world.layout_changed();toast("工位绑定已保存"))
 				side.add_child(pick)
+	note("选一间主题房间，或用家具慢慢搭出自己的角落。")
+	for key in Themes.PRESETS:
+		var preset=Themes.PRESETS[key]
+		var choice=button("＋ "+preset.name+"  ·  "+str(preset.w)+" × "+str(preset.h),func():_begin_room_theme(key))
+		choice.tooltip_text=preset.desc;side.add_child(choice)
+	var filter_pick=OptionButton.new()
+	for title in Model.GROUPS:filter_pick.add_item(title)
+	filter_pick.select(Model.GROUPS.keys().find(build_category));filter_pick.item_selected.connect(func(index):build_category=Model.GROUPS.keys()[index];_render_panel())
+	side.add_child(filter_pick)
+	var grid=GridContainer.new();grid.columns=2;grid.add_theme_constant_override("h_separation",8);grid.add_theme_constant_override("v_separation",8);side.add_child(grid)
+	for kind in Model.CATALOG:
+		if build_category!="全部家具" and not Model.GROUPS[build_category].has(kind):continue
+		var card=FurnitureCard.new();card.kind=kind;card.size_flags_horizontal=Control.SIZE_EXPAND_FILL;card.pressed.connect(func():_begin_furniture(kind));grid.add_child(card)
+	side.add_child(HSeparator.new());side.add_child(label("房间扩建",17))
+	var r=row(side);r.add_child(button("＋ 新房间",_new_room));r.add_child(button("取消放置",_cancel_placement))
+	for room in model.data.rooms:
+		side.add_child(button(room.name+"  ·  "+str(int(room.w))+" × "+str(int(room.h)),func():_room_dialog(room.id)))
 	footer_label.text="编辑模式 · 点击家具选中 · R 旋转 · Delete 删除 · Ctrl/Cmd Z 撤销"
 
 func _begin_furniture(kind:String) -> void:
 	build_kind=kind;build_rotation=0;world.mode="furniture";world.moving_id="";world.placement={"id":model.new_id("f"),"kind":kind,"x":0,"y":0,"rot":0,"owner":""}
 	toast("选择位置放置「"+Model.CATALOG[kind].name+"」")
+
+func _begin_room_theme(key:String) -> void:
+	var preset=Themes.PRESETS[key]
+	world.mode="room";world.moving_id="";world.placement={"id":model.new_id("room"),"name":preset.name,"x":0,"y":0,"w":preset.w,"h":preset.h,"floor":preset.floor,"template":key}
+	var old_zoom=world.zoom;world.zoom=maxf(.4,old_zoom*.72);world.pan*=world.zoom/old_zoom
+	toast(preset.desc+" 贴着现有房间放置，可整间撤销。")
 
 func _move_furniture(f:Dictionary) -> void:
 	world.mode="furniture";world.moving_id=f.id;world.placement=f.duplicate(true);build_rotation=int(f.rot);toast("点击新的位置，右键取消")
@@ -352,6 +385,7 @@ func _world_selected(kind:String,id:String) -> void:
 	elif kind=="room" and tab=="build":selected_room=id;_room_dialog(id)
 
 func _rotate() -> void:
+	if world.mode=="room":return
 	if world.mode=="furniture":world.placement.rot=(int(world.placement.rot)+1)%4;return
 	for f in model.data.furniture:
 		if f.id==selected_furniture:
@@ -386,7 +420,7 @@ func _room_dialog(id:String) -> void:
 	var dialog=_dialog("房间设置",Vector2i(440,400));var v=dialog.get_meta("body")
 	var name_input=LineEdit.new();name_input.text=room.name;v.add_child(name_input)
 	var w=_spin(v,"宽度（格）",room.w,4,24);var h=_spin(v,"深度（格）",room.h,4,20)
-	var floor_pick=OptionButton.new();for title in ["蜂蜜木地板","鼠尾草地板","浅胡桃地板"]:floor_pick.add_item(title)
+	var floor_pick=OptionButton.new();for style in Themes.FLOORS:floor_pick.add_item(style.name)
 	floor_pick.select(int(room.get("floor",0)));v.add_child(floor_pick)
 	v.add_child(wrapped("以左上角为基准调整尺寸。已有家具和相邻房间通路会自动检查。"))
 	v.add_child(button("保存房间",func():
@@ -484,6 +518,7 @@ func _skill_detail(skill:Dictionary) -> void:
 func _tasks_panel() -> void:
 	section("任务与成果")
 	note("这里保留真实任务、子 agent 的协作记录和交付。执行完成后仍需要你验收。")
+	side.add_child(button("导入 Codex 会话",func():_switch_tab("imports"),true))
 	if tasks.is_empty():note("暂时没有任务。回到工作室，把第一项工作交给伙伴吧。");return
 	var ordered=tasks.duplicate();ordered.sort_custom(func(a,b):return a.created>b.created)
 	for t in ordered:
@@ -493,6 +528,14 @@ func _tasks_panel() -> void:
 		v.add_child(wrapped(str(t.prompt).left(90),13,INK))
 		var live=label(_status_text(t),12,MUTED);v.add_child(live);live_labels[t.id]=live
 		v.add_child(button("查看任务与成果",func():_open_task(t.id)))
+
+func _receive_import(task:Dictionary,already:bool=false) -> void:
+	var found=false
+	for i in range(tasks.size()):
+		if tasks[i].id==task.id:tasks[i]=task;found=true;break
+	if not found:tasks.append(task)
+	_refresh_characters();toast("这条会话已在工作室中" if already else "会话已导入。发送新消息时才开始执行。")
+	if tab=="imports":_switch_tab("tasks");_open_task(task.id)
 
 func _dialog(title:String,dimensions:Vector2i) -> Window:
 	var d=Window.new();d.title=title;d.size=dimensions;d.min_size=Vector2i(380,240);d.transient=true;d.exclusive=false;d.unresizable=false;add_child(d)
@@ -546,7 +589,7 @@ func _create_task_panel(task:Dictionary) -> VBoxContainer:
 	actions.get_child(0).size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	var stop=button("停止任务",func():_api("/stop",{"id":id,"children":true},func(_r):toast("已请求停止任务和它的子任务")));actions.add_child(stop)
 	var finish=button("结束对话",func():_finish_task(id));actions.add_child(finish)
-	var hint=wrapped("追加指令沿用本次角色与技能。",12);hint.tooltip_text="修改角色或技能后，请回工作室创建新任务。";v.add_child(hint)
+	var hint=wrapped("追加指令沿用本次角色与技能。",12);hint.tooltip_text="修改角色或技能后，请回工作室创建新任务。";v.add_child(hint);v.set_meta("hint",hint)
 	v.set_meta("output",output);v.set_meta("status",status);v.set_meta("mode",content_mode);v.set_meta("files",files);v.set_meta("file_row",file_row);v.set_meta("request_box",request_box);v.set_meta("request_scroll",request_scroll);v.set_meta("request_id","");v.set_meta("input",text_input)
 	v.set_meta("stop",stop);v.set_meta("finish",finish)
 	content_mode.item_selected.connect(func(_i):v.set_meta("last_content","");_update_task_panel(v,v.get_meta("task")))
@@ -557,11 +600,13 @@ func _update_task_panel(d:Control,t:Dictionary) -> void:
 	d.set_meta("task",t)
 	var unsettled=_task_family(t.id).any(func(member):return member.status not in ["completed","failed","interrupted"])
 	d.get_meta("stop").visible=unsettled
-	d.get_meta("finish").visible=t.status in ["completed","failed","interrupted"] and not _task_ended(t)
+	d.get_meta("finish").visible=t.status in ["completed","failed","interrupted"] and not _task_ended(t) and not _delegated(t)
 	d.get_meta("finish").disabled=unsettled
 	d.get_meta("finish").tooltip_text="还有子任务未结束，请先等待完成或停止任务" if unsettled else "清除完成标记，让伙伴恢复待命；对话记录仍然保留"
 	d.get_meta("status").text=_status_text(t)+(" · "+str(t.get("activity","")) if ACTIVE.has(t.status) else "")
 	d.get_meta("status").tooltip_text=d.get_meta("status").text
+	d.get_meta("hint").text="由"+_owner_name(t)+"派发并负责收尾，补充消息不会改变任务归属。" if _delegated(t) else "追加指令沿用本次角色与技能。"
+	if t.has("imported"):d.get_meta("hint").text="导入会话沿用原上下文与可用技能；角色绑定只改变场景呈现。"
 	var show_chat=d.get_meta("mode").selected==0
 	d.get_meta("chat").visible=show_chat;d.get_meta("output").visible=not show_chat
 	var content=""
@@ -581,6 +626,7 @@ func _update_task_panel(d:Control,t:Dictionary) -> void:
 		2:content=str(t.get("plan","尚无公开任务计划"))
 		3:
 			var p=t.get("snapshot",{});content="角色："+str(p.get("name",t.name))+"\n职责："+str(p.get("role","由主 agent 分配"))+"\n\n本次技能：\n"+"\n".join(p.get("skills",[]))+"\n\n任务 ID："+t.id+"\n工作目录："+t.workspace
+			if t.has("imported"):content="场景伙伴："+t.name+"\n导入方式："+("复制后继续" if t.imported.mode=="fork" else "继续原会话")+"\n原会话："+t.imported.sourceId+"\n\n职责、技能与上下文沿用原会话和当前可用环境，未应用场景伙伴的新任务配置。\n\n任务 ID："+t.id+"\n工作目录："+t.workspace
 	if t.get("error","")!="":content+="\n\n错误："+str(t.error)
 	if content=="":content="正在等待第一条工作记录…" if ACTIVE.has(t.status) else "没有文本输出。请检查工具记录。"
 	if content!=d.get_meta("last_content",""):
@@ -654,7 +700,7 @@ func _workspace_dialog() -> void:
 func _help() -> void:
 	var d=_dialog("欢迎来到栖点工作室",Vector2i(700,550));var v=d.get_meta("body")
 	var help_text=TextEdit.new();help_text.editable=false;help_text.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY;help_text.size_flags_vertical=Control.SIZE_EXPAND_FILL
-	help_text.text="这是一个连接真实 Codex 的 2D 工作室。\n\n1. 右下角选择工作目录；默认附带一个可安全体验的小项目。\n2. 在「伙伴」里设置名字、外观与职责。\n3. 在「技能」里配置本机已有 Skills，保存后用于新任务。\n4. 在「工作室」中输入任务并交给伙伴；勾选团队模式允许原生子 agent。\n5. 点击角色，在右侧边聊边看房间。拖动分隔线调宽；切换角色保留未发送草稿。可看记录、回答问题、审批、追加指令或停止。\n6. 在「布置」中放家具、绑定工位、新增和调整房间。\n\n地图：滚轮缩放，中键拖动，顶部居中。\n布置：R 旋转，Delete 删除，Ctrl/Cmd Z 撤销，右键取消放置。\n\n小人的工作状态来自实际执行事件；待命散步只是场景表现。完成表示执行已结束，成果需要你验收。看完后点击「结束对话」，伙伴恢复待命，完成标记消失；记录保留在「任务与成果」，可以再次继续。\n\n首次接入需已安装并登录 Codex（终端运行 codex login）。游戏可以离线布置，真实任务需要联网和可用的 Codex 额度。关闭游戏时会停止本应用启动的任务。"
+	help_text.text="这是一个连接真实 Codex 的 2D 工作室。\n\n1. 右下角选择工作目录；默认附带一个可安全体验的小项目。\n2. 在「伙伴」里设置名字、外观与职责。\n3. 在「技能」里配置本机已有 Skills，保存后用于新任务。\n4. 在「工作室」中输入任务并交给伙伴；勾选团队模式允许原生子 agent。\n5. 点击角色，在右侧边聊边看房间。拖动分隔线调宽；切换角色保留未发送草稿。可看记录、回答问题、审批、追加指令或停止。\n6. 在「布置」中放家具、绑定工位、新增和调整房间。\n\n地图：滚轮缩放，中键拖动，顶部居中。\n布置：R 旋转，Delete 删除，Ctrl/Cmd Z 撤销，右键取消放置。\n\n小人的工作状态来自实际执行事件；待命时会使用休闲设施，这些活动仅是本地场景动画，不消耗额度。完成表示执行已结束，成果需要你验收。看完后点击「结束对话」，伙伴恢复待命，完成标记消失；记录保留在「任务与成果」，可以再次继续。\n\n首次接入需已安装并登录 Codex（终端运行 codex login）。游戏可以离线布置，真实任务需要联网和可用的 Codex 额度。关闭游戏时会停止本应用启动的任务。"
 	v.add_child(help_text);v.add_child(button("打开存档文件夹",func():OS.shell_open(data_dir)))
 
 func toast(text:String) -> void:
@@ -750,19 +796,29 @@ func _load_skills(reload:bool) -> void:
 	skills_requested=true
 	_api("/skills?cwd="+str(model.data.workspace).uri_encode()+("&reload=1" if reload else ""),{},func(r):skills=r.get("skills",[]);if tab=="skills":_render_panel(),HTTPClient.METHOD_GET)
 
-func _api(endpoint:String,payload:Dictionary,callback:Callable,method:int=HTTPClient.METHOD_POST) -> void:
-	if bridge_url=="":toast("桥接尚未启动，请稍候");return
+func _api(endpoint:String,payload:Dictionary,callback:Callable,method:int=HTTPClient.METHOD_POST,on_error:Callable=Callable()) -> void:
+	if bridge_url=="":
+		toast("桥接尚未启动，请稍候")
+		if on_error.is_valid():on_error.call("桥接尚未启动，请连接后重试。")
+		return
 	var request=HTTPRequest.new();request.timeout=90;add_child(request)
 	request.request_completed.connect(func(_result,code,_headers,body):
 		if endpoint=="/task":submitting=false
 		var result=JSON.parse_string(body.get_string_from_utf8());request.queue_free()
-		if not result is Dictionary:toast("连接失败，请查看右上角连接状态");return
-		if code!=200:toast(str(result.get("error","请求失败")));return
+		if not result is Dictionary:
+			toast("连接失败，请查看右上角连接状态")
+			if on_error.is_valid():on_error.call("连接失败，请检查连接并重试。")
+			return
+		if code!=200:
+			toast(str(result.get("error","请求失败")))
+			if on_error.is_valid():on_error.call(str(result.get("error","请求失败")))
+			return
 		callback.call(result))
 	var err=request.request(bridge_url+endpoint,["Authorization: Bearer "+bridge_token,"Content-Type: application/json"],method,"" if method==HTTPClient.METHOD_GET else JSON.stringify(payload))
 	if err!=OK:
 		if endpoint=="/task":submitting=false
 		request.queue_free();toast("请求无法发出："+error_string(err))
+		if on_error.is_valid():on_error.call("请求无法发出："+error_string(err))
 
 func _submit_task() -> void:
 	if submitting:toast("正在准备上一项任务，请稍候");return

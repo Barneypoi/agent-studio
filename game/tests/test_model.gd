@@ -1,8 +1,10 @@
 extends SceneTree
 const Model=preload("res://studio_model.gd")
 var checks=0
+var failures=0
 func verify(condition:bool,description:String) -> void:
 	if not condition:
+		failures+=1
 		push_error("FAIL: "+description);quit(1)
 		assert(condition,description)
 	checks+=1
@@ -40,5 +42,18 @@ func _initialize() -> void:
 	# A one-cell corridor cannot be sealed by a new solid object.
 	var narrow=Model.new();narrow.data={"rooms":[{"id":"hall","x":0,"y":0,"w":5,"h":1}],"furniture":[],"doors":[]};narrow.save_path=test_dir.path_join("narrow.json")
 	verify(narrow.validate_furniture({"id":"block","kind":"plant","x":2,"y":0,"rot":0})!="","blocking a corridor rejected")
-	print("MODEL_CHECKS_OK ",checks)
-	quit(0)
+	# A furnished expansion is one operation, including save/reload and undo.
+	for key in Model.Themes.PRESETS:
+		var themed=Model.new();themed.data=themed.defaults();themed.save_path=test_dir.path_join(key+".json")
+		var original=themed.data.duplicate(true);var preset=Model.Themes.PRESETS[key]
+		var expansion={"id":"theme-room","name":preset.name,"x":16,"y":2,"w":preset.w,"h":preset.h,"floor":preset.floor,"template":key}
+		verify(themed.put_room(expansion) and themed.connected(themed.data.rooms,themed.data.furniture) and themed.data.furniture.size()==original.furniture.size()+preset.items.size(),"place connected furnished "+key+" as one change")
+		var stored_room=themed.data.rooms[-1].duplicate(true);stored_room.name="自定义房间"
+		verify(not stored_room.has("template") and themed.put_room(stored_room,stored_room.id) and themed.data.furniture.size()==original.furniture.size()+preset.items.size(),"editing a themed room never re-adds its furniture")
+		var saved=Model.new();saved.load_data(themed.save_path)
+		verify(JSON.parse_string(JSON.stringify(saved.data))==JSON.parse_string(JSON.stringify(themed.data)),"themed furniture and floor survive reload")
+		verify(themed.undo() and themed.undo() and themed.data==original,"undo room edit, then remove the entire expansion in one step")
+		expansion.x=0;expansion.y=0
+		verify(not themed.put_room(expansion) and themed.data==original and themed.undo_stack.is_empty(),"invalid themed placement cannot partially change a room")
+	if failures==0:print("MODEL_CHECKS_OK ",checks)
+	quit(1 if failures>0 else 0)
